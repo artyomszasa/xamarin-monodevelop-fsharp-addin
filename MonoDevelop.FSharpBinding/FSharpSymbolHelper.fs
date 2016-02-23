@@ -9,6 +9,7 @@ open MonoDevelop.Core
 open MonoDevelop.Ide
 open MonoDevelop.Ide.CodeCompletion
 open MonoDevelop.Components
+open Mono.TextEditor.Highlighting
 open ExtCore.Control
 
 module Symbols =
@@ -305,8 +306,9 @@ module internal Highlight =
         sprintf "#%02X%02X%02X" (getColourPart c.R) (getColourPart c.G) (getColourPart c.B)
 
     let hl str (style: Highlighting.ChunkStyle) =
-        let color = getColourScheme().GetForeground (style) |> argbToHex
-        String.Format ("""<span foreground="{0}">{1}</span>""", color, str)
+        //let color = getColourScheme().GetForeground (style) |> argbToHex
+        //String.Format ("""<span foreground="{0}">{1}</span>""", color, str)
+        str
 
     let asType t s =
         let cs = getColourScheme ()
@@ -321,6 +323,7 @@ module internal Highlight =
     let asKeyword = asType Keyword
     let asBrackets = asType Brackets
     let asUserType = asType UserType
+        
     let asUnderline = sprintf "<u>%s</u>"
 
 
@@ -556,7 +559,9 @@ module SymbolTooltips =
         let retType =
             //This try block will be removed when FCS updates
             try
-                asUserType (escapeText(func.ReturnParameter.Type.Format displayContext))
+                let input = func.ReturnParameter.Type.Format displayContext
+
+                asUserType (input)
             with _ex ->
                 try
                     if func.FullType.GenericArguments.Count > 0 then
@@ -622,7 +627,12 @@ module SymbolTooltips =
               if isDelegate then typeArguments
               else asKeyword modifiers ++ functionName ++ asSymbol ":" + "\n" + typeArguments
 
-    let getFuncSignature f c = getFuncSignatureWithFormat f c FormatOptions.Default
+    let getFuncSignature f c = 
+        let signature = getFuncSignatureWithFormat f c FormatOptions.Default
+        let data = new TextEditorData (new TextDocument (signature))
+        data.Document.SyntaxMode <- SyntaxModeService.GetSyntaxMode (data.Document, "text/x-fsharp")
+        data.ColorStyle <- getColourScheme()
+        data.GetMarkup (0, data.Length, false)
 
     let getEntitySignature displayContext (fse: FSharpEntity) =
         let modifier =
@@ -755,7 +765,11 @@ module SymbolTooltips =
         | Entity fse ->
             try
                 let signature = getEntitySignature symbol.DisplayContext fse
-                Some(signature, getSummaryFromSymbol fse, footerForType symbol)
+                let data = new TextEditorData (new TextDocument (signature))
+                data.Document.SyntaxMode <- SyntaxModeService.GetSyntaxMode (data.Document, "text/x-fsharp")
+                data.ColorStyle <- getColourScheme()
+                let markup = data.GetMarkup (0, data.Length, false)
+                Some(markup, getSummaryFromSymbol fse, footerForType symbol)
             with exn ->
                 MonoDevelop.Core.LoggingService.LogWarning (sprintf "getTooltipFromSymbolUse: Error occured processing %A" fse)
                 None
